@@ -77,7 +77,7 @@ export default function ResearchWorkspace() {
     }
     setIsSuggesting(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/v1/targets/search?q=${encodeURIComponent(q)}&mission=${encodeURIComponent(m)}`);
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/targets/search?q=${encodeURIComponent(q)}&mission=${encodeURIComponent(m)}`);
       const data = await res.json();
       setSuggestions(data.suggestions || []);
       if (data.suggestions && data.suggestions.length > 0) {
@@ -113,7 +113,7 @@ export default function ResearchWorkspace() {
     setIsSimulatorOpen(false);
     setIsLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/simulate', {
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000') + '/api/v1/simulate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ difficulty })
@@ -225,7 +225,7 @@ export default function ResearchWorkspace() {
     if (!metadata || !pliData) return;
     
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/report/download', {
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000') + '/api/v1/report/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

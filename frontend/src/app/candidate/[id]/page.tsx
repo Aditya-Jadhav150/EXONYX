@@ -13,7 +13,7 @@ export default function CandidateInvestigationCenter() {
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   useEffect(() => {
-    fetch(`http://127.0.0.1:8000/api/v1/candidate/${id}`)
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/candidate/${id}`)
       .then(res => res.json())
       .then(data => {
         if (data.status === 'success') {
@@ -27,7 +27,7 @@ export default function CandidateInvestigationCenter() {
   const handleSaveNotes = async () => {
     setIsSavingNotes(true);
     try {
-      await fetch(`http://127.0.0.1:8000/api/v1/candidate/${id}/notes`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/candidate/${id}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notes })
@@ -41,7 +41,7 @@ export default function CandidateInvestigationCenter() {
   const handleExportReport = async () => {
     if (!candidate) return;
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/v1/report/download', {
+      const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000') + '/api/v1/report/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

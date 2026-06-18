@@ -19,8 +19,8 @@ export default function CompareCandidates() {
     if (!c1Id || !c2Id) return;
 
     Promise.all([
-      fetch(`http://127.0.0.1:8000/api/v1/candidate/${c1Id}`).then(r => r.json()),
-      fetch(`http://127.0.0.1:8000/api/v1/candidate/${c2Id}`).then(r => r.json())
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/candidate/${c1Id}`).then(r => r.json()),
+      fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/candidate/${c2Id}`).then(r => r.json())
     ]).then(([res1, res2]) => {
       if (res1.status === 'success') setC1(res1.candidate);
       if (res2.status === 'success') setC2(res2.candidate);

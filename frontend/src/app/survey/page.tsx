@@ -8,7 +8,7 @@ export default function SurveyDashboard() {
   const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
-    fetch('http://127.0.0.1:8000/api/v1/survey/stats')
+    fetch((process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000') + '/api/v1/survey/stats')
       .then(res => res.json())
       .then(data => setStats(data))
       .catch(err => console.error("Failed to load survey stats", err));
