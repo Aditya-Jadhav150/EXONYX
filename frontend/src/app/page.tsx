@@ -163,7 +163,9 @@ export default function ResearchWorkspace() {
     setRealStage('Connecting to MAST Archive...');
     
     try {
-      const ws = new WebSocket('ws://127.0.0.1:8000/api/v1/data/stream');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+      const wsUrl = apiUrl.replace(/^http/, 'ws') + '/api/v1/data/stream';
+      const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
         ws.send(JSON.stringify({ target_name: targetName, mission, deep_recovery_mode: deepRecoveryMode }));
