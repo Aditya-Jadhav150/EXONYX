@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Scale } from 'lucide-react';
 
-export default function CompareCandidates() {
+function CompareCandidatesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -75,5 +75,13 @@ export default function CompareCandidates() {
         {compareRow("Status", c1.status, c2.status)}
       </div>
     </div>
+  );
+}
+
+export default function CompareCandidates() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#020617] p-10 text-white">Loading comparison...</div>}>
+      <CompareCandidatesContent />
+    </Suspense>
   );
 }
