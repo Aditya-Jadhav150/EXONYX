@@ -9,7 +9,7 @@ import LightCurveViewer from '@/components/LightCurveViewer';
 import CandidateTable from '@/components/CandidateTable';
 import CosmicLoader from '@/components/CosmicLoader';
 import dynamic from 'next/dynamic';
-import { Telescope, Search, Database, LayoutDashboard, Zap, AlertTriangle } from 'lucide-react';
+import { Telescope, Search, Database, LayoutDashboard, Zap, AlertTriangle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
@@ -29,6 +29,7 @@ export default function ResearchWorkspace() {
   const [fetchComplete, setFetchComplete] = useState(false);
   const [realPercent, setRealPercent] = useState(0);
   const [realStage, setRealStage] = useState('Connecting to MAST Archive...');
+  const [isDownloading, setIsDownloading] = useState(false);
   
   // Autocomplete State
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -58,6 +59,7 @@ export default function ResearchWorkspace() {
     temp: "N/A"
   });
 
+  const [metadata, setMetadata] = useState<any>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -226,6 +228,7 @@ export default function ResearchWorkspace() {
   const handleDownloadReport = async () => {
     if (!metadata || !pliData) return;
     
+    setIsDownloading(true);
     try {
       const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000') + '/api/v1/report/download', {
         method: 'POST',
@@ -276,6 +279,8 @@ export default function ResearchWorkspace() {
       }
     } catch (error) {
       console.error("Error downloading report:", error);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -303,10 +308,14 @@ export default function ResearchWorkspace() {
         <div className="flex gap-2">
            <button 
              onClick={handleDownloadReport}
-             disabled={!metadata}
+             disabled={!metadata || isDownloading}
              className="px-4 py-2 bg-indigo-600/80 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg text-sm font-medium transition text-white flex items-center gap-2"
            >
-             Download PDF Report
+             {isDownloading ? (
+               <><Loader2 className="w-4 h-4 animate-spin" /> Generating PDF...</>
+             ) : (
+               "Download PDF Report"
+             )}
            </button>
            <button onClick={() => setIsSimulatorOpen(true)} className="px-4 py-2 bg-slate-800 rounded-lg text-sm font-medium hover:bg-slate-700 transition flex items-center gap-2">
              <LayoutDashboard className="w-4 h-4"/> Simulator

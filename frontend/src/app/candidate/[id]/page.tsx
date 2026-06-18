@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Save, AlertTriangle, Info, Clock, Download } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, Info, Clock, Download, Loader2 } from 'lucide-react';
 import SystemVisualizer from '@/components/SystemVisualizer';
 
 export default function CandidateInvestigationCenter() {
@@ -11,6 +11,7 @@ export default function CandidateInvestigationCenter() {
   const [candidate, setCandidate] = useState<any>(null);
   const [notes, setNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/candidate/${id}`)
@@ -40,6 +41,7 @@ export default function CandidateInvestigationCenter() {
 
   const handleExportReport = async () => {
     if (!candidate) return;
+    setIsDownloading(true);
     try {
       const response = await fetch((process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000') + '/api/v1/report/download', {
         method: 'POST',
@@ -58,6 +60,8 @@ export default function CandidateInvestigationCenter() {
       a.click();
     } catch (error) {
       console.error('Failed to export report', error);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -87,9 +91,14 @@ export default function CandidateInvestigationCenter() {
         </div>
         <button 
           onClick={handleExportReport}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg shadow transition flex items-center gap-2"
+          disabled={isDownloading}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-medium rounded-lg shadow transition flex items-center gap-2"
         >
-          <Download className="w-4 h-4" /> Export Report
+          {isDownloading ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Generating PDF...</>
+          ) : (
+            <><Download className="w-4 h-4" /> Export Report</>
+          )}
         </button>
       </header>
 
