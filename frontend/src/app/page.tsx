@@ -59,7 +59,6 @@ export default function ResearchWorkspace() {
     temp: "N/A"
   });
 
-  const [metadata, setMetadata] = useState<any>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
