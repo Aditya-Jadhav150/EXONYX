@@ -1,5 +1,5 @@
-import React from 'react';
-import { Database, X } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Database, X, Loader2 } from 'lucide-react';
 import CandidateTable from './CandidateTable';
 
 interface CandidateDBModalProps {
@@ -8,6 +8,25 @@ interface CandidateDBModalProps {
 }
 
 export default function CandidateDBModal({ isOpen, onClose }: CandidateDBModalProps) {
+  const [candidates, setCandidates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLoading(true);
+      fetch((process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000') + '/api/v1/candidates')
+        .then(res => res.json())
+        .then(data => {
+          setCandidates(data.candidates || []);
+          setLoading(false);
+        })
+        .catch(err => {
+          console.error("Failed to fetch candidates", err);
+          setLoading(false);
+        });
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -24,8 +43,17 @@ export default function CandidateDBModal({ isOpen, onClose }: CandidateDBModalPr
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-hidden p-4">
-          <CandidateTable />
+        <div className="flex-1 overflow-hidden p-4 flex flex-col">
+          {loading ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-4" />
+              <p>Loading candidates...</p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <CandidateTable data={candidates} />
+            </div>
+          )}
         </div>
       </div>
     </div>
