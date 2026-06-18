@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deep Space — Star Field</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #000;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10; text-align: center; color: white; font-family: system-ui, -apple-system, sans-serif;">
+  <h1 style="font-size: 5rem; margin-bottom: 10px; letter-spacing: 0.2em; text-shadow: 0 0 20px rgba(99, 102, 241, 0.5);">EXONYX</h1>
+  <p style="margin-bottom: 50px; color: #cbd5e1; font-size: 1.2rem; letter-spacing: 0.05em;">AI-Assisted Exoplanet Discovery Pipeline</p>
+  <a href="/dashboard" target="_top" style="padding: 16px 40px; background: rgba(79, 70, 229, 0.8); border: 1px solid rgba(99, 102, 241, 0.5); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; transition: all 0.3s ease; box-shadow: 0 0 30px rgba(79, 70, 229, 0.3); backdrop-filter: blur(4px);">
+    Initialize Sequence
+  </a>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.143.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.143.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three'
+import { EffectComposer }        from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass }            from 'three/addons/postprocessing/RenderPass.js'
+import { UnrealBloomPass }       from 'three/addons/postprocessing/UnrealBloomPass.js'
+import { ShaderPass }            from 'three/addons/postprocessing/ShaderPass.js'
+import { GammaCorrectionShader } from 'three/addons/shaders/GammaCorrectionShader.js'
+import { CopyShader }            from 'three/addons/shaders/CopyShader.js'
+
+// ── helpers ────────────────────────────────────────────────────────────────
+function hexToVec3(hex) {
+  const n = parseInt(hex.slice(1), 16)
+  return new THREE.Vector3(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
+}
+
+// ── layers ─────────────────────────────────────────────────────────────────
+const LAYERS = { NONE: 0, TORUS_SCENE: 1, BLOOM_SCENE: 2, ENTIRE_SCENE: 3 }
+
+// ── renderer ───────────────────────────────────────────────────────────────
+const canvas = document.getElementById('scene')
+const renderer = new THREE.WebGL1Renderer({ canvas, antialias: true })
+renderer.setPixelRatio(window.devicePixelRatio)
+renderer.shadowMap.enabled = true
+renderer.shadowMap.type = THREE.VSMShadowMap
+
+// ── scene & camera ─────────────────────────────────────────────────────────
+const scene = new THREE.Scene()
+scene.background = new THREE.Color(0x000000)
+scene.fog = new THREE.Fog(0x000000, 0, 22)
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 80)
+camera.position.set(0, 0, 3)
+scene.add(camera)
+
+camera.layers.enable(LAYERS.TORUS_SCENE)
+camera.layers.enable(LAYERS.BLOOM_SCENE)
+camera.layers.enable(LAYERS.ENTIRE_SCENE)
+
+// ── FinalPass composite shader ─────────────────────────────────────────────
+const FinalPass = {
+  uniforms: {
+    iTime:        { value: 0 },
+    tDiffuse:     { value: null },
+    torusTexture: { value: null },
+    bloomTexture: { value: null },
+    haloTexture:  { value: null },
+    uBg:          { value: hexToVec3('#00010d') },
+    uFlameA:      { value: hexToVec3('#1a6aff') },
+    uFlameB:      { value: hexToVec3('#b060ff') },
+    uFlameAmt:    { value: 0.05 }
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform float iTime;
+    uniform sampler2D tDiffuse;
+    uniform sampler2D bloomTexture;
+    uniform sampler2D torusTexture;
+    uniform sampler2D haloTexture;
+    uniform vec3 uBg;
+    uniform vec3 uFlameA;
+    uniform vec3 uFlameB;
+    uniform float uFlameAmt;
+    varying vec2 vUv;
+
+    vec3 warp3d(vec3 pos, float t){
+      float curv=.8,a=1.9,b=0.7;
+      pos*=2.;
+      pos.x+=curv*sin(t+a*pos.y)+t*b;
+      pos.y+=curv*cos(t+a*pos.x);
+      pos.y+=curv*sin(t+a*pos.z)+t*b;
+      pos.z+=curv*cos(t+a*pos.y);
+      pos.z+=curv*sin(t+a*pos.x)+t*b;
+      pos.x+=curv*cos(t+a*pos.z);
+      return 0.5+0.5*cos(pos.xyz+vec3(1,2,4));
+    }
+
+    void main(){
+      vec2 uv = 2.*vUv - 1.;
+      /* nebula — very subtle, edge-only, slow */
+      vec3 w = pow(warp3d(vec3(uv.x, sin(uv.y), uv.y), iTime*0.4), vec3(3.5));
+      vec3 nebula = uFlameA*w.x*0.6; nebula*=w.y; nebula += uFlameB*w.z*0.5;
+      /* hard restrict to extreme edges only */
+      float edgeMask = smoothstep(0.55, 1.0, length(uv) * 0.78);
+      nebula *= edgeMask * edgeMask * edgeMask;
+      /* deep void background — near pitch black */
+      float vign = 1.0 - 0.45 * dot(uv, uv);
+      vec3 bg = uBg * vign * 0.7;
+      vec3 halo = texture2D(haloTexture, vUv).xyz;
+      gl_FragColor = vec4(
+        bg
+        + nebula*uFlameAmt
+        + texture2D(bloomTexture,  vUv).xyz
+        + texture2D(torusTexture,  vUv).xyz
+        + texture2D(tDiffuse,      vUv).xyz
+        + halo,
+        1.
+      );
+    }
+  `
+}
+
+// ── postprocessing composers ───────────────────────────────────────────────
+const renderPass = new RenderPass(scene, camera)
+
+// torusComposer
+const torusComposer = new EffectComposer(renderer)
+torusComposer.renderToScreen = false
+torusComposer.addPass(renderPass)
+torusComposer.addPass(new ShaderPass(GammaCorrectionShader))
+torusComposer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.15, 0))
+torusComposer.addPass(new ShaderPass(CopyShader))
+
+// bloomComposer — boosted bloom radius for star diffraction spikes feel
+const bloomComposer = new EffectComposer(renderer)
+bloomComposer.renderToScreen = false
+bloomComposer.addPass(renderPass)
+bloomComposer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.6, 0.35, 0))
+bloomComposer.addPass(new ShaderPass(GammaCorrectionShader))
+
+// finalComposer
+const finalComposer = new EffectComposer(renderer)
+const finalPass = new ShaderPass(FinalPass)
+finalPass.uniforms.bloomTexture.value = bloomComposer.renderTarget1.texture
+finalPass.uniforms.torusTexture.value = torusComposer.renderTarget1.texture
+finalComposer.addPass(renderPass)
+finalComposer.addPass(finalPass)
+
+// ── dust point-cloud material ──────────────────────────────────────────────
+const uniforms = {
+  iTime:       { value: 0 },
+  iShift:      { value: new THREE.Vector3() },
+  iAlpha:      { value: 0 },
+  iAnimation:  { value: new THREE.Vector3(0, 0, 0) },
+  iResolution: { value: { x: innerWidth * devicePixelRatio, y: innerHeight * devicePixelRatio } },
+  uDepth:      { value: 3.7 },
+  uCool:       { value: hexToVec3('#ccd8ff') },  // blue-white star
+  uWarm:       { value: hexToVec3('#fffbe8') }   // warm white star
+}
+
+const material = new THREE.ShaderMaterial({
+  transparent: true,
+  uniforms,
+  vertexShader: `
+    attribute float size;
+    uniform float iTime;
+    uniform vec3  iShift;
+    uniform vec2  iResolution;
+    uniform vec3  iAnimation;
+    uniform float uDepth;
+    varying float transparency;
+    varying float warmness;
+    varying float vPhase;      // unique per-star twinkling phase seed
+    varying float vBrightness; // per-star twinkle brightness (computed in vertex)
+
+    vec3 warp3d(vec3 pos, float t) {
+      float curv = 0.9, a = 1.9, b = 0.25, b2 = 0.03, c = 0.02;
+      pos *= 2.;
+      pos.x += curv * sin(c * t + a * pos.y) + t * b2;
+      pos.y += curv * cos(c * t + a * pos.x);
+      pos.z += curv * cos(c * t + a * pos.y);
+      pos.z += curv * sin(c * t + a * pos.x) + t * b;
+      pos.z = abs(pos.z);
+      return pos.xyz;
+    }
+
+    void main() {
+      vec3 v = warp3d(position, iTime);
+      v = uDepth * (2. * fract(v + iShift) - 1.) + iAnimation;
+      vec4 vpos = modelViewMatrix * vec4(v, 1.);
+      transparency = step(length(v), uDepth);
+      warmness = step(.75, fract(size * 7.13));
+
+      // unique phase & speed per star based on its size
+      vPhase = fract(size * 3.71) * 6.2832;           // 0..2π offset
+      float freq  = 1.4 + fract(size * 9.37) * 3.8;  // 1.4..5.2 Hz
+      // two overlapping sine waves for organic shimmer
+      float s1 = sin(iTime * freq        + vPhase);
+      float s2 = sin(iTime * freq * 1.61 + vPhase * 2.1);
+      vBrightness = 0.55 + 0.45 * (0.6 * s1 + 0.4 * s2); // 0.1 .. 1.0
+
+      // slightly scale point size with twinkle so core physically blooms
+      float sizeBoost = 1.0 + 0.25 * vBrightness;
+      gl_PointSize = size * sizeBoost * iResolution.y / 1800. / -vpos.z;
+      gl_Position = projectionMatrix * vpos;
+    }
+  `,
+  fragmentShader: `
+    varying float transparency;
+    varying float warmness;
+    varying float vPhase;
+    varying float vBrightness;
+    uniform float iAlpha;
+    uniform vec3  uCool;
+    uniform vec3  uWarm;
+
+    void main() {
+      vec2 pc = 2.0 * gl_PointCoord - 1.0;
+      float d  = length(pc);
+
+      /* ── shape: tight core + broad halo ── */
+      float core = smoothstep(1.0, 0.0, d * 2.2);        // crisp pinpoint
+      float halo = smoothstep(1.0, 0.0, d * 0.65) * 0.4; // soft glow ring
+      float tex  = core + halo;
+
+      /* ── diffraction cross-spikes (appear on brighter twinkles) ── */
+      float spikeX = smoothstep(0.9, 0.0, abs(pc.x)) * smoothstep(0.18, 0.0, abs(pc.y));
+      float spikeY = smoothstep(0.9, 0.0, abs(pc.y)) * smoothstep(0.18, 0.0, abs(pc.x));
+      // 45° diagonal spikes — fainter
+      vec2  pd     = vec2(pc.x + pc.y, pc.x - pc.y) * 0.707;
+      float spikeD = smoothstep(0.85, 0.0, abs(pd.x)) * smoothstep(0.12, 0.0, abs(pd.y)) * 0.35;
+      float spike  = (spikeX + spikeY + spikeD) * vBrightness * 0.55;
+
+      /* ── per-star colour: cool blue-white → warm white ── */
+      vec3 color = mix(uCool, uWarm, warmness);
+      // push core toward pure white, tinted by twinkle brightness
+      color = mix(color, vec3(1.0), core * (0.4 + 0.4 * vBrightness));
+      // spike color: slightly blue-shifted
+      vec3 spikeColor = mix(vec3(0.7, 0.85, 1.0), vec3(1.0), warmness * 0.5);
+
+      /* ── apply twinkling to overall brightness ── */
+      float bright = vBrightness * vBrightness; // squared = more contrast between dim/bright
+      // minimum floor so even dim stars are visible
+      float floor_ = 0.25;
+      bright = floor_ + (1.0 - floor_) * bright;
+      float alpha  = tex * transparency * iAlpha * (0.55 + 0.45 * bright);
+
+      // cores blow out to pure white at peak brightness
+      color = mix(color, vec3(1.0), core * bright * 0.7);
+
+      gl_FragColor = vec4(
+        (tex * color + spike * spikeColor) * (bright * 1.4),
+        alpha
+      );
+    }
+  `
+})
+material.stencil = false
+
+// ── geometry & points ──────────────────────────────────────────────────────
+const count = 940
+const positions = [], sizes = []
+for (let i = 0; i < count; i++) {
+  positions.push(2 * Math.random() - 1, 2 * Math.random() - 1, 2 * Math.random() - 1)
+  // stars: mostly small with occasional brighter ones
+  sizes.push(8 + 22 * Math.pow(Math.random(), 2.2))
+}
+const geometry = new THREE.BufferGeometry()
+geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+geometry.setAttribute('size',     new THREE.Float32BufferAttribute(sizes, 1))
+
+const points = new THREE.Points(geometry, material)
+points.position.set(0, 0, -1)
+points.layers.enable(LAYERS.BLOOM_SCENE)   // stars get bloomed now
+points.layers.enable(LAYERS.ENTIRE_SCENE)
+scene.add(points)
+
+// ── flyPoints per-frame updater ────────────────────────────────────────────
+const flyPoints = {
+  render() {
+    uniforms.iTime.value = performance.now() / 1000
+    uniforms.iShift.value.add(camera.position.clone().multiplyScalar(0.0022 * 0.4))
+  }
+}
+
+// ── resize handler ─────────────────────────────────────────────────────────
+function onResize() {
+  const w   = window.innerWidth
+  const h   = window.innerHeight
+  const dpr = window.devicePixelRatio
+
+  renderer.setPixelRatio(dpr)
+  renderer.setSize(w, h, false)
+
+  camera.aspect = w / h
+  camera.updateProjectionMatrix()
+
+  for (const composer of [torusComposer, bloomComposer, finalComposer]) {
+    composer.setPixelRatio(dpr)
+    composer.setSize(w, h)
+  }
+
+  uniforms.iResolution.value = { x: w * dpr, y: h * dpr }
+}
+window.addEventListener('resize', onResize)
+onResize() // call once at startup
+
+// ── fade-in on load ────────────────────────────────────────────────────────
+const FADE_DURATION = 2200
+const ALPHA_TARGET  = 0.95
+const fadeStart     = performance.now()
+
+function appearIn() {
+  const t     = Math.min((performance.now() - fadeStart) / FADE_DURATION, 1)
+  const eased = t * t * t * (t * (t * 6 - 15) + 10)   // smootherstep
+  uniforms.iAlpha.value = eased * ALPHA_TARGET
+  if (t < 1) requestAnimationFrame(appearIn)
+}
+requestAnimationFrame(appearIn)
+
+// ── main render loop ───────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate)
+
+  finalPass.uniforms.iTime.value = performance.now() / 1000
+  flyPoints.render()
+
+  camera.layers.set(LAYERS.TORUS_SCENE);  torusComposer.render()
+  camera.layers.set(LAYERS.BLOOM_SCENE);  bloomComposer.render()
+  camera.layers.set(LAYERS.ENTIRE_SCENE); finalComposer.render()
+}
+animate()
+</script>
+</body>
+</html>

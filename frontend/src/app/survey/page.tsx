@@ -29,7 +29,7 @@ export default function SurveyDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-6">
           <div>
-            <Link href="/" className="inline-flex items-center text-sm text-indigo-400 hover:text-indigo-300 mb-4 transition-colors">
+            <Link href="/dashboard" className="inline-flex items-center text-sm text-indigo-400 hover:text-indigo-300 mb-4 transition-colors">
               <ArrowLeft className="w-4 h-4 mr-2" /> Back to Main Dashboard
             </Link>
             <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">
