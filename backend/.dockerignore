@@ -1,0 +1,9 @@
+venv/
+.env
+__pycache__/
+*.pyc
+data_cache/
+exonyx.db
+datasets/
+.pytest_cache/
+*.pdf
