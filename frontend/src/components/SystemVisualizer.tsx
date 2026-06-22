@@ -501,7 +501,7 @@ export default function SystemVisualizer({ candidate }: { candidate: CandidateDa
         <CameraController simState={simState} distance={distance} />
 
         {/* Cinematic Post Processing */}
-        <EffectComposer disableNormalPass multisampling={4}>
+        <EffectComposer multisampling={4}>
           <Bloom luminanceThreshold={0.2} luminanceSmoothing={0.9} height={300} intensity={1.5} />
           <Vignette eskil={false} offset={0.1} darkness={1.2} />
         </EffectComposer>
