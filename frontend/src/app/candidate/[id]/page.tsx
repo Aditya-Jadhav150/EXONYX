@@ -2,8 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Save, AlertTriangle, Info, Clock, Download, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, AlertTriangle, Info, Clock, Download, Loader2, BrainCircuit } from 'lucide-react';
 import SystemVisualizer from '@/components/SystemVisualizer';
+import AstroChatAssistant from '@/components/AstroChatAssistant';
+import MCMCDiagnostics from '@/components/MCMCDiagnostics';
 
 export default function CandidateInvestigationCenter() {
   const { id } = useParams();
@@ -12,6 +14,7 @@ export default function CandidateInvestigationCenter() {
   const [notes, setNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'notebook' | 'chat'>('notebook');
 
   useEffect(() => {
     fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/v1/candidate/${id}`)
@@ -65,7 +68,14 @@ export default function CandidateInvestigationCenter() {
     }
   };
 
-  if (!candidate) return <div className="p-10 text-white">Loading candidate data...</div>;
+  if (!candidate) return (
+    <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+      <div className="text-center">
+        <Loader2 className="w-10 h-10 text-indigo-400 animate-spin mx-auto mb-4" />
+        <p className="text-slate-400 text-sm">Loading candidate data...</p>
+      </div>
+    </div>
+  );
 
   const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
@@ -111,71 +121,101 @@ export default function CandidateInvestigationCenter() {
         <span><strong className="text-slate-300">Last Updated:</strong> {formatDate(candidate.last_updated)}</span>
       </div>
 
-      <div className="flex gap-6">
-        {/* Main Content */}
-        <main className="flex-[3] flex flex-col gap-6">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-              <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">Physical Parameters</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm"><span className="text-slate-500">Radius (R⊕)</span><span className="font-mono text-emerald-300">{candidate.radius} ± {candidate.radius_err}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-500">Period (d)</span><span className="font-mono text-white">{candidate.period.toFixed(4)} ± {candidate.period_err?.toFixed(4)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-500">Semi-Major Axis (AU)</span><span className="font-mono text-white">{candidate.semi_major_axis?.toFixed(4)} ± {candidate.semi_major_axis_err?.toFixed(4)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-500">Duration (h)</span><span className="font-mono text-white">{candidate.transit_duration.toFixed(2)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-500">Eq Temp (K)</span><span className="font-mono text-orange-300">{candidate.equilibrium_temp} ± {candidate.equilibrium_temp_err}</span></div>
-              </div>
-            </div>
+      {/* Hero Visualization */}
+      <section className="w-full h-[600px] bg-slate-900 border border-slate-800 rounded-xl overflow-hidden relative shadow-2xl">
+        <SystemVisualizer candidate={candidate} />
+      </section>
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-              <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">Validation Summary</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm items-center"><span className="text-slate-500">FP Risk</span><span className="font-mono text-red-300">{candidate.fp_risk}%</span></div>
-                <div className="flex justify-between text-sm items-center"><span className="text-slate-500">CNN Conv</span>{candidate.cnn_confidence !== null && candidate.cnn_confidence !== undefined ? <span className="font-mono text-blue-400">{candidate.cnn_confidence.toFixed(1)}%</span> : <span className="text-xs text-slate-400 border border-slate-700 px-1.5 rounded">UNAVAILABLE</span>}</div>
-                <div className="flex justify-between text-sm items-center"><span className="text-slate-500">SDE Power</span><span className="font-mono text-white">{candidate.sde_confidence}</span></div>
-                <div className="flex justify-between text-sm items-center"><span className="text-slate-500">Reduced X²</span><span className="font-mono text-white">{candidate.reduced_chi_square?.toFixed(2)}</span></div>
-              </div>
-            </div>
+      {/* MCMC Diagnostics */}
+      <MCMCDiagnostics candidateId={candidate.id} />
 
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-              <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-2 font-semibold">Habitability</h3>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm"><span className="text-slate-500">ESI Score</span><span className="font-mono text-green-300">{candidate.esi_score} ± {candidate.esi_score_err?.toFixed(1)}</span></div>
-                <div className="flex justify-between text-sm"><span className="text-slate-500">HZ Centricity</span><span className="font-mono text-white">{candidate.hz_score}%</span></div>
-              </div>
-            </div>
+      {/* Scientific Metrics & Data */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-4 font-bold flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-blue-500"></div> Physical Parameters
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm border-b border-slate-800/50 pb-2"><span className="text-slate-400">Radius (R⊕)</span><span className="font-mono text-emerald-300 font-medium">{candidate.radius} ± {candidate.radius_err}</span></div>
+            <div className="flex justify-between text-sm border-b border-slate-800/50 pb-2"><span className="text-slate-400">Period (d)</span><span className="font-mono text-white font-medium">{candidate.period.toFixed(4)} ± {candidate.period_err?.toFixed(4)}</span></div>
+            <div className="flex justify-between text-sm border-b border-slate-800/50 pb-2"><span className="text-slate-400">Semi-Major Axis (AU)</span><span className="font-mono text-white font-medium">{candidate.semi_major_axis?.toFixed(4)} ± {candidate.semi_major_axis_err?.toFixed(4)}</span></div>
+            <div className="flex justify-between text-sm border-b border-slate-800/50 pb-2"><span className="text-slate-400">Duration (h)</span><span className="font-mono text-white font-medium">{candidate.transit_duration.toFixed(2)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Eq Temp (K)</span><span className="font-mono text-orange-400 font-medium">{candidate.equilibrium_temp} ± {candidate.equilibrium_temp_err}</span></div>
           </div>
+        </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-             <h3 className="text-sm text-slate-300 font-semibold mb-4 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-yellow-400" /> False Positive Assessment Log</h3>
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-4 font-bold flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-purple-500"></div> Validation Summary
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm border-b border-slate-800/50 pb-2 items-center"><span className="text-slate-400">FP Risk</span><span className="font-mono text-red-400 font-medium">{candidate.fp_risk}%</span></div>
+            <div className="flex justify-between text-sm border-b border-slate-800/50 pb-2 items-center"><span className="text-slate-400">CNN Conv</span>{candidate.cnn_confidence !== null && candidate.cnn_confidence !== undefined ? <span className="font-mono text-blue-400 font-medium">{candidate.cnn_confidence.toFixed(1)}%</span> : <span className="text-xs text-slate-500 border border-slate-800 px-1.5 rounded bg-slate-950">UNAVAILABLE</span>}</div>
+            <div className="flex justify-between text-sm border-b border-slate-800/50 pb-2 items-center"><span className="text-slate-400">SDE Power</span><span className="font-mono text-white font-medium">{candidate.sde_confidence}</span></div>
+            <div className="flex justify-between text-sm items-center"><span className="text-slate-400">Reduced X²</span><span className="font-mono text-white font-medium">{candidate.reduced_chi_square?.toFixed(2)}</span></div>
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+          <h3 className="text-xs text-slate-400 uppercase tracking-wider mb-4 font-bold flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Habitability
+          </h3>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm border-b border-slate-800/50 pb-2"><span className="text-slate-400">ESI Score</span><span className="font-mono text-green-400 font-medium">{candidate.esi_score} ± {candidate.esi_score_err?.toFixed(1)}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-400">HZ Centricity</span><span className="font-mono text-white font-medium">{candidate.hz_score}%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+           <h3 className="text-sm text-slate-300 font-bold mb-4 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-yellow-500" /> False Positive Assessment Log</h3>
+           <div className="bg-slate-950 rounded-lg p-4 border border-slate-800/50 h-64 overflow-y-auto">
              <p className="text-sm font-mono text-slate-400 whitespace-pre-wrap leading-relaxed">{candidate.validation_summary}</p>
-          </div>
-        </main>
+           </div>
+        </div>
 
-        {/* Sidebar: Visualizer & Notebook */}
-        <aside className="flex-1 flex flex-col gap-4">
-          <SystemVisualizer 
-            starRadius={1.0} // Fallback, would ideally be passed from candidate record if stored
-            planets={[{ radius: candidate.radius, semiMajorAxis: candidate.semi_major_axis }]}
-          />
-          
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex-1 flex flex-col">
-            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-              <Info className="w-4 h-4 text-blue-400" /> Research Notebook
-            </h3>
-            <textarea
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-3 text-sm text-slate-300 font-mono resize-none focus:outline-none focus:border-indigo-500 transition"
-              placeholder="Add scientific observations, hypotheses, or external catalog links here..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-            />
+        <div className="bg-slate-900 border border-slate-800 rounded-xl shadow-lg flex flex-col min-h-[400px]">
+          <div className="flex border-b border-slate-800">
             <button 
-              onClick={handleSaveNotes}
-              className="mt-4 w-full py-2 bg-indigo-600/80 hover:bg-indigo-500 rounded-lg text-sm font-medium transition text-white flex justify-center items-center gap-2"
+              onClick={() => setActiveTab('notebook')}
+              className={`flex-1 py-3 text-sm font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-2 ${
+                activeTab === 'notebook' ? 'text-indigo-400 border-b-2 border-indigo-500 bg-slate-800/50 rounded-tl-xl' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30 rounded-tl-xl'
+              }`}
             >
-              <Save className="w-4 h-4" /> {isSavingNotes ? "Saving..." : "Save Notes"}
+              <Info className="w-4 h-4" /> Research Notebook
+            </button>
+            <button 
+              onClick={() => setActiveTab('chat')}
+              className={`flex-1 py-3 text-sm font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-2 ${
+                activeTab === 'chat' ? 'text-amber-400 border-b-2 border-amber-500 bg-slate-800/50 rounded-tr-xl' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30 rounded-tr-xl'
+              }`}
+            >
+              <BrainCircuit className="w-4 h-4" /> Astro-Chat Assistant
             </button>
           </div>
-        </aside>
+
+          <div className="flex-1 p-5 flex flex-col">
+            {activeTab === 'notebook' ? (
+              <>
+                <textarea
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg p-4 text-sm text-slate-300 font-mono resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500 transition shadow-inner"
+                  placeholder="Add scientific observations, hypotheses, or external catalog links here..."
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                />
+                <button 
+                  onClick={handleSaveNotes}
+                  className="mt-4 w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-bold tracking-wide transition text-white flex justify-center items-center gap-2 shadow-lg shadow-indigo-500/20"
+                >
+                  <Save className="w-4 h-4" /> {isSavingNotes ? "Saving..." : "Save Notes"}
+                </button>
+              </>
+            ) : (
+              <AstroChatAssistant candidateId={candidate.id} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

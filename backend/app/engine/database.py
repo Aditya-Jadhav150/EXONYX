@@ -55,18 +55,52 @@ class Candidate(Base):
     # Research Notebook
     notes = Column(Text, default="")
 
+class Campaign(Base):
+    __tablename__ = "campaigns"
+    
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    start_time = Column(DateTime, default=datetime.datetime.utcnow)
+    end_time = Column(DateTime, nullable=True)
+    targets_processed = Column(Integer, default=0)
+    candidates_generated = Column(Integer, default=0)
+    high_priority_found = Column(Integer, default=0)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
-def save_candidate(data_dict: dict):
-    """Save a newly detected candidate to the database."""
+def save_campaign(data_dict: dict):
     db = SessionLocal()
     try:
-        candidate = Candidate(**data_dict)
-        db.add(candidate)
+        campaign = Campaign(**data_dict)
+        db.add(campaign)
         db.commit()
-        db.refresh(candidate)
-        return candidate
+        db.refresh(campaign)
+        return campaign
+    finally:
+        db.close()
+
+def save_candidate(data_dict: dict):
+    """Save or update a candidate in the database (upsert by target_id + mission)."""
+    db = SessionLocal()
+    try:
+        existing = db.query(Candidate).filter(
+            Candidate.target_id == data_dict.get("target_id"),
+            Candidate.mission == data_dict.get("mission")
+        ).first()
+        
+        if existing:
+            for key, value in data_dict.items():
+                if hasattr(existing, key):
+                    setattr(existing, key, value)
+            db.commit()
+            db.refresh(existing)
+            return existing
+        else:
+            candidate = Candidate(**data_dict)
+            db.add(candidate)
+            db.commit()
+            db.refresh(candidate)
+            return candidate
     finally:
         db.close()
 

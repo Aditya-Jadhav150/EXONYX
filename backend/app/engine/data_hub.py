@@ -22,26 +22,31 @@ def fetch_lightcurve(target_name: str, mission: str = "Kepler", quarter: int = N
     elif mission.lower() == "k2":
         search_kwargs["mission"] = "K2"
 
-    # Search for light curve files
-    search_result = lk.search_lightcurve(**search_kwargs)
-    
-    if len(search_result) == 0:
-        return {"status": "error", "message": f"No light curves found for {target_name} ({mission})."}
-
-    try:
-        if deep_recovery_mode:
-            # Deep Recovery: stitch all available quarters together
-            lc_collection = search_result.download_all(download_dir=CACHE_DIR)
-            if lc_collection is None or len(lc_collection) == 0:
-                return {"status": "error", "message": "Failed to load deep recovery light curves."}
-            lc = lc_collection.stitch()
-        else:
-            # Fast Survey Mode: grab the first quarter/sector to avoid 60-second downloads
-            lc = search_result[0].download(download_dir=CACHE_DIR)
-            if lc is None:
-                return {"status": "error", "message": "Failed to load light curve."}
-    except Exception as e:
-        return {"status": "error", "message": f"Error downloading data: {str(e)}"}
+    # Search and Download with Retry Logic
+    max_retries = 3
+    lc = None
+    for attempt in range(max_retries):
+        try:
+            search_result = lk.search_lightcurve(**search_kwargs)
+            if len(search_result) == 0:
+                return {"status": "error", "message": f"No light curves found for {target_name} ({mission})."}
+                
+            if deep_recovery_mode:
+                lc_collection = search_result.download_all(download_dir=CACHE_DIR)
+                if lc_collection is None or len(lc_collection) == 0:
+                    return {"status": "error", "message": "Failed to load deep recovery light curves."}
+                lc = lc_collection.stitch()
+            else:
+                lc = search_result[0].download(download_dir=CACHE_DIR)
+                if lc is None:
+                    return {"status": "error", "message": "Failed to load light curve."}
+            break # Success!
+        except Exception as e:
+            if attempt < max_retries - 1:
+                import time
+                time.sleep(2 * (attempt + 1)) # 2s, 4s backoff
+                continue
+            return {"status": "error", "message": f"Error downloading data after {max_retries} attempts: {str(e)}"}
 
     if lc is None:
         return {"status": "error", "message": "Failed to load light curve."}

@@ -1,6 +1,11 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import routes
+from fastapi.staticfiles import StaticFiles
+from app.api import routes, survey
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(
     title="EXONYX AI-assisted Exoplanet Discovery API",
@@ -17,7 +22,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files for MCMC corner plots
+os.makedirs("data_cache/mcmc", exist_ok=True)
+app.mount("/mcmc", StaticFiles(directory="data_cache/mcmc"), name="mcmc")
+
 app.include_router(routes.router, prefix="/api/v1")
+app.include_router(survey.router, prefix="/api/v1/survey")
 
 @app.get("/")
 async def root():

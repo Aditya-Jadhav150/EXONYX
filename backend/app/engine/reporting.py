@@ -460,14 +460,44 @@ def generate_scientific_report(target_name: str, mission: str, analysis_data: di
     ]))
     elements.append(t_fp)
     
-    # Future Expansion Loop (Conditionally Rendered)
+    # Future Expansion Loop & MCMC Appendix
+    appendix_counter = ord('B')
+    
+    # Render MCMC
+    if 'mcmc' in analysis_data and analysis_data['mcmc']:
+        mcmc = analysis_data['mcmc']
+        elements.append(Spacer(1, 0.3*inch))
+        elements.append(Paragraph(f"Appendix {chr(appendix_counter)}: MCMC Posterior Diagnostics", styles['SubSection']))
+        
+        mcmc_stats = [
+            ["Metric", "Value"],
+            ["Period (days)", f"{mcmc.get('period_mcmc', 0):.4f} +{mcmc.get('period_err_plus', 0):.4f} -{mcmc.get('period_err_minus', 0):.4f}"],
+            ["Depth", f"{mcmc.get('depth_mcmc', 0):.4f} +{mcmc.get('depth_err_plus', 0):.4f} -{mcmc.get('depth_err_minus', 0):.4f}"],
+            ["Impact Parameter", f"{mcmc.get('impact_parameter', 0):.3f} +{mcmc.get('b_err_plus', 0):.3f} -{mcmc.get('b_err_minus', 0):.3f}"]
+        ]
+        t_mcmc = Table(mcmc_stats, colWidths=[200, 300])
+        t_mcmc.setStyle(TableStyle([
+            ('GRID', (0,0), (-1,-1), 1, colors.HexColor("#cbd5e1")),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1e293b")),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.whitesmoke),
+            ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+            ('PADDING', (0,0), (-1,-1), 6),
+        ]))
+        elements.append(t_mcmc)
+        elements.append(Spacer(1, 0.2*inch))
+        
+        plot_path = mcmc.get('corner_plot_path')
+        import os
+        if plot_path and os.path.exists(plot_path):
+            elements.append(Image(plot_path, width=6.5*inch, height=6.5*inch))
+        
+        appendix_counter += 1
+        
     future_keys = [
-        ('mcmc', 'MCMC Posterior Diagnostics'),
         ('deep_recovery', 'Deep Recovery Pipeline'),
         ('follow_up', 'Follow-Up Observation Logs')
     ]
     
-    appendix_counter = ord('B')
     for key, title in future_keys:
         if key in analysis_data and analysis_data[key]:
             elements.append(Spacer(1, 0.3*inch))

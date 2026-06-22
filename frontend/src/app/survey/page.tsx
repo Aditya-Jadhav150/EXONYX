@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ShieldCheck, Cpu, HardDrive, Zap, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, Cpu, HardDrive, Zap, AlertTriangle, ArrowLeft, Loader2 } from 'lucide-react';
 
 export default function SurveyDashboard() {
   const [stats, setStats] = useState<any>(null);
@@ -16,14 +16,17 @@ export default function SurveyDashboard() {
 
   if (!stats) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-950 text-white">
-        <div className="text-xl animate-pulse text-indigo-400">Connecting to EXONYX Engine...</div>
+      <div className="flex items-center justify-center min-h-screen bg-[#020617] text-white">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-indigo-400 animate-spin mx-auto mb-4" />
+          <p className="text-slate-400 text-sm">Connecting to EXONYX Engine...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-300 p-8">
+    <div className="min-h-screen bg-[#020617] text-slate-300 p-8">
       <div className="max-w-6xl mx-auto space-y-8">
         
         {/* Header */}

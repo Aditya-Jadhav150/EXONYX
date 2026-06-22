@@ -48,7 +48,8 @@ def run_false_positive_analysis(time: np.ndarray, flux: np.ndarray, period: floa
     if len(odd_depths) > 0 and len(even_depths) > 0:
         mean_odd = np.mean(odd_depths)
         mean_even = np.mean(even_depths)
-        diff_ratio = abs(mean_odd - mean_even) / max(mean_odd, mean_even)
+        denominator = max(mean_odd, mean_even)
+        diff_ratio = abs(mean_odd - mean_even) / denominator if denominator > 0 else 0.0
         if diff_ratio > 0.2: # >20% difference is highly suspicious
             tests["odd_even"] = "FAIL"
             score -= 40

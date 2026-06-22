@@ -511,6 +511,33 @@ async def simulate_discovery(request: SimulationRequest):
         }
     }
 
+@router.get("/candidate/{candidate_id}/mcmc")
+async def get_mcmc_diagnostics(candidate_id: int):
+    from app.engine.database import SessionLocal, Candidate
+    session = SessionLocal()
+    cand = session.query(Candidate).filter(Candidate.id == candidate_id).first()
+    session.close()
+    
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+        
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    json_path = os.path.join(BASE_DIR, "data_cache", "mcmc", f"{cand.target_id}_mcmc.json")
+    
+    if not os.path.exists(json_path):
+        return {"status": "unavailable", "message": "MCMC Diagnostics Unavailable: Candidate signal strength (PLI) was below the threshold required for multi-chain sampling."}
+        
+    try:
+        with open(json_path, "r") as f:
+            mcmc_data = json.load(f)
+            
+        # Provide the static URL to the image
+        # Using NEXT_PUBLIC_API_URL or relative path. We'll return a relative path.
+        mcmc_data['corner_plot_url'] = f"/mcmc/{cand.target_id}_corner.png"
+        return mcmc_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class ReportRequest(BaseModel):
     target_name: str
     mission: str
@@ -644,3 +671,118 @@ async def search_targets(q: str = "", mission: str = "Kepler"):
         traceback.print_exc()
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
+
+class ChatRequest(BaseModel):
+    candidate_id: int
+    message: str
+
+@router.post("/chat")
+async def chat_with_candidate(request: ChatRequest):
+    candidates = get_all_candidates()
+    cand = next((c for c in candidates if c['id'] == request.candidate_id), None)
+    if not cand:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+        
+    msg_lower = request.message.lower()
+    
+    # Helper to format response
+    def make_response(title, analysis, evidence, conclusion, risk_level="Moderate", confidence="High"):
+        return {
+            "response": {
+                "title": title,
+                "metrics": {
+                    "Risk Score": f"{cand['fp_risk']}%",
+                    "Confidence Level": confidence,
+                    "Evidence Strength": "Strong" if float(cand['sde_confidence']) > 9.0 else "Moderate"
+                },
+                "analysis": analysis,
+                "evidence_used": evidence,
+                "conclusion": conclusion
+            }
+        }
+
+    # Hybrid Explainability: Local Deterministic Explanations
+    if "pli" in msg_lower and ("why" in msg_lower or "explain" in msg_lower or "what" in msg_lower):
+        return make_response(
+            title="Pipeline Likelihood Index (PLI) Analysis",
+            analysis=f"The PLI is currently {cand['pli_score']}. It is calculated deterministically by combining the TLS confidence ({cand['sde_confidence']}) and the AstroNet CNN confidence, weighted against the False Positive Risk ({cand['fp_risk']}%).",
+            evidence=["TLS Confidence", "AstroNet CNN", "FP Risk Assessment"],
+            conclusion="The PLI indicates the statistical probability that the detected signal is of planetary origin."
+        )
+    
+    if "fp risk" in msg_lower or "false positive" in msg_lower or "fp" in msg_lower.split():
+        return make_response(
+            title="False Positive Assessment",
+            analysis=f"The pipeline log notes: {cand['validation_summary']}",
+            evidence=["Odd-Even Depth Variation", "Secondary Eclipse Check", "Background Star Contamination"],
+            conclusion=f"The candidate has a False Positive Risk of {cand['fp_risk']}%, remaining consistent with a planetary interpretation." if float(cand['fp_risk']) < 20 else "The candidate exhibits significant false-positive indicators requiring manual review."
+        )
+        
+    if "transit evidence" in msg_lower or "sde" in msg_lower or "tls" in msg_lower:
+        return make_response(
+            title="Transit Evidence Evaluation",
+            analysis=f"The Transit Least Squares (TLS) algorithm detected a periodic signal every {cand['period']:.3f} days with a Signal Detection Efficiency (SDE) power of {cand['sde_confidence']}. The transit depth is {cand.get('transit_depth', 0):.4f}.",
+            evidence=["TLS Periodogram", "Phase-Folded Curve", "Transit Depth Model"],
+            conclusion="An SDE above 9.0 typically indicates a strong physical signal rather than noise." if float(cand['sde_confidence']) > 9.0 else "The SDE is marginal, suggesting a weak signal or noisy data."
+        )
+        
+    if "esi" in msg_lower or "habitability" in msg_lower and ("why" in msg_lower or "explain" in msg_lower):
+        return make_response(
+            title="Habitability & Earth Similarity",
+            analysis=f"The Earth Similarity Index (ESI) is {cand['esi_score']}, derived from the planet's radius ({cand['radius']} R⊕) and equilibrium temperature ({cand['equilibrium_temp']} K) compared to Earth's values (1.0 R⊕, ~255 K). The HZ Centricity is {cand['hz_score']}%.",
+            evidence=["Equilibrium Temperature", "Stellar Flux", "Planet Radius"],
+            conclusion="A score above 0.8 is considered potentially habitable." if float(cand['esi_score']) > 0.8 else "The planetary parameters are inconsistent with Earth-like habitability."
+        )
+
+    # Fallback to Gemini for Scientific Q&A, Summaries, Earth Comparisons
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return make_response(
+            title="Deterministic Fallback Mode",
+            analysis="The GEMINI_API_KEY is not configured in the backend environment.",
+            evidence=["Environment Variables"],
+            conclusion="I can explain the PLI, ESI, FP Risk, or TLS metrics directly, but I cannot generate complex scientific summaries without the LLM."
+        )
+        
+    try:
+        from google import genai
+        from google.genai import types
+        import json
+        client = genai.Client(api_key=api_key)
+        
+        prompt = f"""You are the EXONYX Research Co-Pilot, a formal scientific assistant helping an astronomer investigate exoplanet candidates. Do not act like a casual chatbot. Be concise, professional, and evidence-driven. Do NOT use LaTeX formulas (e.g. R_\text{{Earth}}), use standard text (e.g. R_Earth or Earth Radii). No markdown formatting like **bold** in the data strings.
+
+The user is investigating candidate {cand['target_id']}.
+Telemetry: Radius={cand['radius']} Earth Radii, Period={cand['period']} days, Temp={cand['equilibrium_temp']} K, ESI={cand['esi_score']}, PLI={cand['pli_score']}, FP Risk={cand['fp_risk']}%
+
+User's Query: {request.message}
+
+Respond EXACTLY using this JSON schema. Do not include markdown code block backticks outside the JSON.
+{{
+  "title": "String (e.g. Candidate Summary, Earth Comparison)",
+  "metrics": {{
+    "Risk Score": "{cand['fp_risk']}%",
+    "Confidence Level": "High|Moderate|Low",
+    "Evidence Strength": "Strong|Moderate|Weak"
+  }},
+  "analysis": "String (The detailed scientific breakdown of the query. For 'Explain this candidate', include Classification, Planet Profile, Detection Summary, Habitability, and FP Assessment as plain text without asterisks or markdown)",
+  "evidence_used": ["Array", "of", "Strings", "(e.g. 'Stellar Flux Model', 'Kepler Data')"],
+  "conclusion": "String (The final verdict or concluding thought)"
+}}"""
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+            )
+        )
+        
+        return {"response": json.loads(response.text)}
+    except Exception as e:
+        return make_response(
+            title="LLM Communication Error",
+            analysis=f"Failed to reach the Gemini API: {str(e)}",
+            evidence=["Network Request"],
+            conclusion="Ensure your API key is valid and you have network connectivity."
+        )

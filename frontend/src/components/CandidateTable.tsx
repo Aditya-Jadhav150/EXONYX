@@ -8,7 +8,7 @@ export default function CandidateTable({ data }: { data: any[] }) {
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-  const toggleSelect = (e: React.MouseEvent, id: number) => {
+  const toggleSelect = (e: React.SyntheticEvent, id: number) => {
     e.stopPropagation();
     setSelectedIds(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
@@ -71,7 +71,8 @@ export default function CandidateTable({ data }: { data: any[] }) {
                     <input 
                       type="checkbox" 
                       checked={isSelected}
-                      onClick={(e) => toggleSelect(e, cand.id)}
+                      onChange={(e) => toggleSelect(e, cand.id)}
+                      onClick={(e) => e.stopPropagation()}
                       className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-indigo-500 cursor-pointer"
                     />
                   </td>

@@ -319,8 +319,8 @@ export default function ResearchWorkspace() {
            <button onClick={() => setIsSimulatorOpen(true)} className="px-4 py-2 bg-slate-800 rounded-lg text-sm font-medium hover:bg-slate-700 transition flex items-center gap-2">
              <LayoutDashboard className="w-4 h-4"/> Simulator
            </button>
-           <Link href="/survey" className="px-4 py-2 bg-yellow-600/80 hover:bg-yellow-500 rounded-lg text-sm font-medium transition text-white flex items-center gap-2">
-             <Zap className="w-4 h-4"/> Survey Engine
+           <Link href="/campaign" className="px-4 py-2 bg-yellow-600/80 hover:bg-yellow-500 rounded-lg text-sm font-medium transition text-white flex items-center gap-2">
+             <Zap className="w-4 h-4"/> Survey Campaign
            </Link>
            <button onClick={() => setIsCandidateDBOpen(true)} className="px-4 py-2 bg-emerald-700/80 hover:bg-emerald-600 rounded-lg text-sm font-medium transition text-white flex items-center gap-2">
              <Database className="w-4 h-4"/> Candidate DB
