@@ -14,6 +14,7 @@ from app.engine.characterization import characterize_planet, run_mcmc_characteri
 from app.engine.habitability import assess_habitability
 from app.engine.scoring import calculate_pli
 from app.engine.database import save_candidate, save_campaign, SessionLocal, Campaign
+from app.engine.diagnostics import get_vram_usage
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -228,6 +229,27 @@ async def process_target(target, ws: WebSocket, sem: asyncio.Semaphore,
                 "result_status": "Failed", "pli": 0,
                 "message": "Internal processing error. Please retry."
             })
+        finally:
+            # Update Peak VRAM
+            current_vram = get_vram_usage()
+            async with state_lock:
+                if current_vram > campaign_state.get("peak_vram", 0):
+                    campaign_state["peak_vram"] = current_vram
+                    
+            # Hard VRAM management for RTX 3050 4GB constraint
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except ImportError:
+                pass
+                
+            try:
+                import cupy as cp
+                cp.get_default_memory_pool().free_all_blocks()
+                cp.get_default_pinned_memory_pool().free_all_blocks()
+            except ImportError:
+                pass
 
 @router.websocket("/batch")
 async def survey_campaign_batch(websocket: WebSocket):
@@ -245,6 +267,11 @@ async def survey_campaign_batch(websocket: WebSocket):
             await websocket.send_json({"type": "error", "message": "No targets provided."})
             await websocket.close()
             return
+            
+        if len(targets) > 50:
+            await websocket.send_json({"type": "error", "message": "GPU Protection: Maximum 50 targets per campaign allowed."})
+            await websocket.close()
+            return
         
         # Deduplicate targets by target_id
         seen = set()
@@ -257,6 +284,9 @@ async def survey_campaign_batch(websocket: WebSocket):
         targets = unique_targets
             
         # Create Campaign Audit Trail
+        vram_start = get_vram_usage()
+        logger.info(f"Campaign Start. VRAM Usage: {vram_start} MB")
+        
         campaign_record = save_campaign({
             "start_time": datetime.datetime.utcnow(),
             "targets_processed": 0,
@@ -268,7 +298,8 @@ async def survey_campaign_batch(websocket: WebSocket):
             "processed": 0,
             "candidates": 0,
             "high_priority": 0,
-            "pli_sum": 0.0
+            "pli_sum": 0.0,
+            "peak_vram": vram_start
         }
         
         await websocket.send_json({
@@ -277,7 +308,8 @@ async def survey_campaign_batch(websocket: WebSocket):
             "total_targets": len(targets)
         })
         
-        sem = asyncio.Semaphore(3)
+        # Limit concurrency for RTX 3050 4GB VRAM safety
+        sem = asyncio.Semaphore(2)
         
         tasks = [
             asyncio.create_task(
@@ -287,6 +319,9 @@ async def survey_campaign_batch(websocket: WebSocket):
         ]
         
         await asyncio.gather(*tasks)
+        
+        vram_end = get_vram_usage()
+        logger.info(f"Campaign Complete. Peak VRAM: {campaign_state['peak_vram']} MB. End VRAM: {vram_end} MB")
         
         # Update Campaign Audit Trail
         db = SessionLocal()

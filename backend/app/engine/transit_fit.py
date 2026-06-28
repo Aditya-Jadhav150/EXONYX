@@ -1,15 +1,44 @@
 import numpy as np
 import batman
+import logging
+
+logger = logging.getLogger(__name__)
+
+try:
+    import cupy as cp
+    GPU_AVAILABLE = True
+except ImportError:
+    GPU_AVAILABLE = False
+    cp = None
+
+_PHASE_LOGGED = False
 
 def phase_fold(time: np.ndarray, period: float, t0: float):
     """
     Phase fold a light curve around a given period and epoch.
+    Accelerated with CuPy if available.
     Returns the phase array (-0.5 to 0.5) centered on transit.
     """
+    global _PHASE_LOGGED
     if period <= 0:
         return time * 0.0
-    phase = ((time - t0 + 0.5 * period) % period) - 0.5 * period
+        
+    xp = cp if GPU_AVAILABLE else np
+    
+    if not _PHASE_LOGGED:
+        backend = "CuPy" if GPU_AVAILABLE else "NumPy CPU Fallback"
+        logger.info(f"Phase Folding Backend: {backend}")
+        _PHASE_LOGGED = True
+    
+    # Convert to GPU array if needed
+    t_arr = xp.array(time)
+    
+    phase = ((t_arr - t0 + 0.5 * period) % period) - 0.5 * period
     phase = phase / period
+    
+    # Return to CPU as numpy array
+    if GPU_AVAILABLE:
+        return xp.asnumpy(phase)
     return phase
 
 def fit_transit_model(time: np.ndarray, flux: np.ndarray, period: float, t0: float, 

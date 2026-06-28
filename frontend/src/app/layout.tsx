@@ -12,6 +12,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+import GPUDiagnostics from "@/components/GPUDiagnostics";
+
 export const metadata: Metadata = {
   title: "EXONYX — Autonomous Exoplanet Discovery",
   description: "AI-powered autonomous exoplanet discovery platform. Real-time transit detection, CNN validation, MCMC characterization, and habitability assessment from NASA MAST archive data.",
@@ -32,7 +34,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <GPUDiagnostics />
+      </body>
     </html>
   );
 }

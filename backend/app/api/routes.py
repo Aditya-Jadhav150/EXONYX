@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pandas as pd
 import numpy as np
 import json
@@ -17,31 +17,45 @@ from app.engine.false_positive import run_false_positive_analysis
 from app.engine.characterization import characterize_planet, run_mcmc_characterization
 from app.engine.transit_fit import phase_fold, fit_transit_model
 from app.engine.knowledge import fetch_knowledge_context
+from app.engine.diagnostics import get_gpu_diagnostics
+
+# Import limiter from main
+# Since circular imports can be tricky, we'll get it from request.app.state.limiter in the decorators
+# wait, slowapi requires the limiter object in the decorator. 
+# It's better to instantiate a shared limiter or import from main.
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
 
+@router.get("/gpu/diagnostics")
+def get_diagnostics():
+    return get_gpu_diagnostics()
+
 class SimulationRequest(BaseModel):
-    difficulty: str
+    difficulty: str = Field(..., max_length=20)
 
 class DataLoadRequest(BaseModel):
-    target_name: str
-    mission: str = "Kepler"
+    target_name: str = Field(..., max_length=50)
+    mission: str = Field("Kepler", max_length=20)
     quarter: int = None
     sector: int = None
     deep_recovery_mode: bool = False
 
 class NotesRequest(BaseModel):
-    notes: str
+    notes: str = Field(..., max_length=5000)
 
 @router.post("/data/load")
-async def load_real_data(request: DataLoadRequest):
+@limiter.limit("20/hour")
+async def load_real_data(request: Request, payload: DataLoadRequest):
     # 1. Fetch
     raw_res = fetch_lightcurve(
-        target_name=request.target_name, 
-        mission=request.mission, 
-        quarter=request.quarter, 
-        sector=request.sector,
-        deep_recovery_mode=request.deep_recovery_mode
+        target_name=payload.target_name, 
+        mission=payload.mission, 
+        quarter=payload.quarter, 
+        sector=payload.sector,
+        deep_recovery_mode=payload.deep_recovery_mode
     )
     if raw_res["status"] == "error":
         raise HTTPException(status_code=404, detail=raw_res["message"])
@@ -57,7 +71,7 @@ async def load_real_data(request: DataLoadRequest):
     df = pd.DataFrame({"time": time_array, "raw_flux": flux_array, "clean_flux": clean_flux})
     
     # 3. Detect (TLS)
-    tls_result = run_tls(df['time'].values, df['clean_flux'].values, request.deep_recovery_mode)
+    tls_result = run_tls(df['time'].values, df['clean_flux'].values, payload.deep_recovery_mode)
     
     period = tls_result['period'] if tls_result['period'] else 0.0
     duration = tls_result['duration'] if tls_result['duration'] else 0.0
@@ -122,7 +136,7 @@ async def load_real_data(request: DataLoadRequest):
     # MCMC Characterization for strong candidates
     if pli_result['score'] > 85.0:
         try:
-            mcmc_res = run_mcmc_characterization(request.target_name, period, depth)
+            mcmc_res = run_mcmc_characterization(payload.target_name, period, depth)
             char_res['mcmc'] = mcmc_res
             char_res['period_err'] = max(mcmc_res['period_err_minus'], mcmc_res['period_err_plus'])
             char_res['transit_depth_err'] = max(mcmc_res['depth_err_minus'], mcmc_res['depth_err_plus'])
@@ -130,7 +144,7 @@ async def load_real_data(request: DataLoadRequest):
             print(f"MCMC Failed: {e}")
             
     # 10. Knowledge Engine
-    knowledge = fetch_knowledge_context(request.target_name)
+    knowledge = fetch_knowledge_context(payload.target_name)
     
     # Downsample large arrays for frontend
     if len(df) > 2000:
@@ -156,7 +170,7 @@ async def load_real_data(request: DataLoadRequest):
     # - Transit count is sparse (len(transit_times) <= 2)
     
     deep_recovery_recommended = False
-    if not request.deep_recovery_mode:
+    if not payload.deep_recovery_mode:
         sde = tls_result.get('sde', 0.0)
         t_times = tls_result.get('transit_times', [])
         esi = hab_result.get('esi', 0.0)
@@ -194,8 +208,8 @@ async def load_real_data(request: DataLoadRequest):
     # Save to DB
     if pli_result['score'] > 50.0:
         save_candidate({
-            "target_id": request.target_name,
-            "mission": request.mission,
+            "target_id": payload.target_name,
+            "mission": payload.mission,
             "period": char_res["period_days"],
             "period_err": char_res["period_err"],
             "radius": char_res["planet_radius_earth"],
@@ -539,20 +553,21 @@ async def get_mcmc_diagnostics(candidate_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 class ReportRequest(BaseModel):
-    target_name: str
-    mission: str
+    target_name: str = Field(..., max_length=50)
+    mission: str = Field(..., max_length=20)
     analysis_data: dict
 
 @router.post("/report/download")
-async def download_report(request: ReportRequest):
+@limiter.limit("10/day")
+async def download_report(request: Request, payload: ReportRequest):
     try:
-        pdf_bytes = generate_scientific_report(request.target_name, request.mission, request.analysis_data)
+        pdf_bytes = generate_scientific_report(payload.target_name, payload.mission, payload.analysis_data)
         
         if not pdf_bytes:
             raise HTTPException(status_code=500, detail="Failed to generate PDF")
             
         return Response(content=pdf_bytes, media_type="application/pdf", headers={
-            "Content-Disposition": f"attachment; filename=EXONYX_Report_{request.target_name}.pdf"
+            "Content-Disposition": f"attachment; filename=EXONYX_Report_{payload.target_name}.pdf"
         })
     except Exception as e:
         import traceback
@@ -674,16 +689,17 @@ async def search_targets(q: str = "", mission: str = "Kepler"):
 
 class ChatRequest(BaseModel):
     candidate_id: int
-    message: str
+    message: str = Field(..., max_length=1000)
 
 @router.post("/chat")
-async def chat_with_candidate(request: ChatRequest):
+@limiter.limit("30/minute")
+async def chat_with_candidate(request: Request, payload: ChatRequest):
     candidates = get_all_candidates()
-    cand = next((c for c in candidates if c['id'] == request.candidate_id), None)
+    cand = next((c for c in candidates if c['id'] == payload.candidate_id), None)
     if not cand:
         raise HTTPException(status_code=404, detail="Candidate not found")
         
-    msg_lower = request.message.lower()
+    msg_lower = payload.message.lower()
     
     # Helper to format response
     def make_response(title, analysis, evidence, conclusion, risk_level="Moderate", confidence="High"):
@@ -734,6 +750,11 @@ async def chat_with_candidate(request: ChatRequest):
             conclusion="A score above 0.8 is considered potentially habitable." if float(cand['esi_score']) > 0.8 else "The planetary parameters are inconsistent with Earth-like habitability."
         )
 
+    # Prompt Injection Protection
+    suspicious_keywords = ["ignore", "previous instructions", "system prompt", "bypass", "override", "you are a", "print context"]
+    if any(keyword in msg_lower for keyword in suspicious_keywords):
+        raise HTTPException(status_code=400, detail="Invalid query format.")
+
     # Fallback to Gemini for Scientific Q&A, Summaries, Earth Comparisons
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -755,7 +776,7 @@ async def chat_with_candidate(request: ChatRequest):
 The user is investigating candidate {cand['target_id']}.
 Telemetry: Radius={cand['radius']} Earth Radii, Period={cand['period']} days, Temp={cand['equilibrium_temp']} K, ESI={cand['esi_score']}, PLI={cand['pli_score']}, FP Risk={cand['fp_risk']}%
 
-User's Query: {request.message}
+User's Query: {payload.message}
 
 Respond EXACTLY using this JSON schema. Do not include markdown code block backticks outside the JSON.
 {{

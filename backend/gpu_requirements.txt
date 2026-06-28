@@ -1,0 +1,13 @@
+# Optional CUDA-X Dependencies for RTX 3050 (Windows)
+# Install these alongside the standard requirements.txt if you want GPU acceleration.
+
+# PyTorch with CUDA 12.1 (ensure your NVIDIA drivers are up to date)
+# Run this specifically via pip:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# CuPy for array acceleration (matches CUDA 12.x)
+cupy-cuda12x==13.0.0
+
+# ONNX Runtime for TensorRT / CUDA execution provider
+onnxruntime-gpu==1.17.1
+onnx==1.15.0
