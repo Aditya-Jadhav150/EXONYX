@@ -12,7 +12,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-import GPUDiagnostics from "@/components/GPUDiagnostics";
 
 export const metadata: Metadata = {
   title: "EXONYX — Autonomous Exoplanet Discovery",
@@ -36,7 +35,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         {children}
-        <GPUDiagnostics />
+
       </body>
     </html>
   );
